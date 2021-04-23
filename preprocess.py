@@ -44,7 +44,7 @@ def get_gtsrb_test_dataset():
     y_test = []
     i = 0
     for file_name, class_id  in zip(list(test['Filename']), list(test['ClassId'])):
-        img_path = os.path.join('data/GTSRB-2/Final_Test/Images/',file_name)
+        img_path = os.path.join('data/GTSRB/Final_Test/Images/',file_name)
         x_test.append(preprocess_img(io.imread(img_path)))
         y_test.append(class_id)
         
