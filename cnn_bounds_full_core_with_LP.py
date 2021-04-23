@@ -483,8 +483,8 @@ def run(file_name, n_samples, p_n, q_n, activation = 'sigmoid', cifar=False, fas
     log_name = 'logs/'+s[len(s)-1]+'_with_LP_log.txt'
     f = open(log_name, 'w')
     print('targets:', targets)
-    #epss = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
-    epss = [0.01]
+    epss = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
+    #epss = [0.01]
     results = []
     limit_time = 600
         
