@@ -25,7 +25,7 @@ def run_cnn(file_name, n_samples, norm, core=True, activation='sigmoid', cifar=F
             return run_cnn_full(file_name, n_samples, 1, 105, activation, cifar, fashion_mnist, gtsrb)
 
 
-def run_all_general(file_name, num_image = 1, core=True, cifar=False, fashion_mnist=False, gtsrb=False):
+def run_all_general(file_name, num_image = 100, core=True, cifar=False, fashion_mnist=False, gtsrb=False):
     if len(file_name.split('_')) == 5:
         nlayer = file_name.split('_')[-3][0]
         filters = file_name.split('_')[-2]
@@ -40,12 +40,12 @@ def run_all_general(file_name, num_image = 1, core=True, cifar=False, fashion_mn
 if __name__ == '__main__':
     LB = []
     time = []
-    tables = [1,2]
+    tables = [1,2,3]
     
     log_name = 'logs/results_test_log.txt'
     f = open(log_name, 'w')
     
-    '''
+    
     for table in tables:
         
         print("===================================================", file=f)
@@ -57,14 +57,14 @@ if __name__ == '__main__':
         
         # pure cnn
         if table == 1:
-            #total_models.append('models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself.h5')
-            #total_resutls.append(run_all_general('models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
-            # total_models.append('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5')
-            # total_resutls.append(run_all_general('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
-            # total_models.append('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5')
-            # total_resutls.append(run_all_general('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
-            # total_models.append('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5')
-            # total_resutls.append(run_all_general('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
+            total_models.append('models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_all_general('models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
+            total_models.append('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_all_general('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
+            total_models.append('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_all_general('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
+            total_models.append('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_all_general('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5', fashion_mnist=True))
             total_models.append('models/gtsrb_cnn_5layer_sigmoid_myself.h5')
             total_resutls.append(run_all_general('models/gtsrb_cnn_5layer_sigmoid_myself.h5', gtsrb=True))
             
@@ -77,13 +77,6 @@ if __name__ == '__main__':
         if table == 3:
             total_models.append('models/cifar10_resnet_2_sigmoid_myself')
             total_resutls.append(run_all_general('models/cifar10_resnet_2_sigmoid_myself', core=False, cifar=True))
-            # total_models.append('models/cifar10_resnet_3_sigmoid_myself.h5')
-            # total_resutls.append(run_all_general('models/cifar10_resnet_3_sigmoid_myself.h5', core=False, cifar=True))
-            # total_models.append('models/cifar10_resnet_4_sigmoid_myself.h5')
-            # total_resutls.append(run_all_general('models/cifar10_resnet_4_sigmoid_myself.h5', core=False, cifar=True))
-            # total_models.append('models/cifar10_resnet_5_sigmoid_myself.h5')
-            # total_resutls.append(run_all_general('models/cifar10_resnet_5_sigmoid_myself.h5', core=False, cifar=True))
-            
         
         for j in range(len(total_models)):
             print(total_models[j], file=f)
@@ -95,7 +88,6 @@ if __name__ == '__main__':
             print()
             print()
     
-    '''
     for table in tables:
         
         print("========================================================", file=f)
@@ -109,12 +101,12 @@ if __name__ == '__main__':
         if table == 1:
             total_models.append('models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself.h5')
             total_resutls.append(run_main('models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
-            # total_models.append('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5')
-            # total_resutls.append(run_main('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
-            # total_models.append('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5')
-            # total_resutls.append(run_main('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
-            # total_models.append('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5')
-            # total_resutls.append(run_main('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
+            total_models.append('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_main('models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
+            total_models.append('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_main('models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
+            total_models.append('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5')
+            total_resutls.append(run_main('models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself.h5', 'cnn', 'fashion_mnist'))
             total_models.append('models/gtsrb_cnn_5layer_sigmoid_myself.h5')
             total_resutls.append(run_main('models/gtsrb_cnn_5layer_sigmoid_myself.h5', 'cnn', 'gtsrb'))
             
