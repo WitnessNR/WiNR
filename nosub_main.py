@@ -26,10 +26,10 @@ def run_main(netname, net_type, dataset):
     print('*******************')
     nn = load_model(netname)
 
-    #eps = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
-    eps = [0.3]
+    eps = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
+    #eps = [0.3]
     eps_dic = {}
-    test_image_num = 1
+    test_image_num = 100
     limit_time = 600
 
     for ite in eps:
