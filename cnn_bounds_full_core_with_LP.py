@@ -4,17 +4,25 @@ import matplotlib.pyplot as plt
 
 from solve import *
 
-from tensorflow.contrib.keras.api.keras.models import Sequential
-from tensorflow.contrib.keras.api.keras.layers import Dense, Dropout, Activation, Flatten, GlobalAveragePooling2D, Lambda
-from tensorflow.contrib.keras.api.keras.layers import Conv2D, MaxPooling2D, AveragePooling2D, InputLayer, BatchNormalization, Reshape
-from tensorflow.contrib.keras.api.keras.models import load_model
-from tensorflow.contrib.keras.api.keras import backend as K
+# from tensorflow.contrib.keras.api.keras.models import Sequential
+# from tensorflow.contrib.keras.api.keras.layers import Dense, Dropout, Activation, Flatten, GlobalAveragePooling2D, Lambda
+# from tensorflow.contrib.keras.api.keras.layers import Conv2D, MaxPooling2D, AveragePooling2D, InputLayer, BatchNormalization, Reshape
+# from tensorflow.contrib.keras.api.keras.models import load_model
+# from tensorflow.contrib.keras.api.keras import backend as K
+# from tensorflow.contrib.keras.api.keras.datasets import mnist, cifar10
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, GlobalAveragePooling2D, Lambda
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, AveragePooling2D, InputLayer, BatchNormalization, Reshape
+from tensorflow.keras.models import load_model
+from tensorflow.keras.datasets import mnist, cifar10
 import tensorflow as tf
-from tensorflow.contrib.keras.api.keras.datasets import mnist, cifar10
+
 
 from utils import generate_data_myself
 import time
 from activations import sigmoid_linear_bounds
+from pgd_attack import *
 linear_bounds = None
 
 import random
@@ -160,9 +168,6 @@ class CNNModel:
 
 @njit
 def conv(W, x, pad, stride):
-    print('--------conv function:--------')
-    print('x.shape[0]', x.shape[0])
-    print('x.shape[1]', x.shape[1])
     p_hl, p_hr, p_wl, p_wr = pad
     s_h, s_w = stride
     y = np.zeros((int((x.shape[0]-W.shape[1]+p_hl+p_hr)/s_h)+1, int((x.shape[1]-W.shape[2]+p_wl+p_wr)/s_w)+1, W.shape[0]), dtype=np.float32)
@@ -440,9 +445,15 @@ def find_output_bounds(weights, biases, shapes, pads, strides, x0, eps, p_n):
         LBs.append(LB)
     return LBs[-1], UBs[-1], A_u, A_l, B_u, B_l, pad, stride
 
-def run(file_name, n_samples, p_n, q_n, activation = 'sigmoid', cifar=False, fashion_mnist=False, gtsrb=False):
+ts = time.time()
+timestr = datetime.datetime.fromtimestamp(ts).strftime('%Y%m%d_%H%M%S')
+#Prints to log file
+def printlog(s):
+    print(s, file=open("logs/cnn_bounds_full_core_with_LP"+timestr+".txt", "a"))
+
+def run(file_name, n_samples, eps_0, p_n, q_n, activation = 'sigmoid', cifar=False, fashion_mnist=False, gtsrb=False):
     np.random.seed(1215)
-    tf.set_random_seed(1215)
+    #tf.set_random_seed(1215)
     random.seed(1215)
     keras_model = load_model(file_name, custom_objects={'fn':fn, 'tf':tf})
 
@@ -479,151 +490,478 @@ def run(file_name, n_samples, p_n, q_n, activation = 'sigmoid', cifar=False, fas
         
     print('----------generated data---------')
 
-    s = file_name.split('/')
-    log_name = 'logs/'+s[len(s)-1]+'_with_LP_log.txt'
-    f = open(log_name, 'w')
-    print('targets:', targets)
-    epss = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03]
-    #epss = [0.01]
-    results = []
-    limit_time = 600
+    
+    #eps_0 = 0.020
+   
+    printlog('===========================================')
+    printlog("model name = {}".format(file_name))
+    printlog("eps = {:.5f}".format(eps_0))
+    
+    time_limit = 2000
+    
+    DeepCert_robust_number = 0
+    PGD_falsified_number = 0
+    PGD_DeepCert_unknown_number = 0
+    DeepCert_robust_img_id = []
+    PGD_time = 0
+    DeepCert_time = 0
+    total_images = 0
+    
+    '''
+    printlog("----------------PGD+DeepCert----------------")
+    
+    for i in range(len(inputs)):
+        total_images += 1
+        printlog("----------------image id = {}----------------".format(i))
+        predict_label = np.argmax(true_labels[i])
+        printlog("image predict label = {}".format(predict_label))
         
-    for eps_0 in epss:
-        print('--- Verifing ---', file=f)
-        print('--- Verifing ---')
-        start_time = time.time()
-        robust_number = 0
-        unrobust_number = 0
-        has_adv_false_number = 0 
-        calculation_total_time = 0
-        solver_total_time = 0
+        printlog("----------------PGD----------------")
+        PGD_start_time = time.time()
+        # generate adversarial example using PGD
+        PGD_flag = False
+        predict_label_for_attack = predict_label.astype("float32")
+        image = tf.constant(inputs[i])
+        image = tf.expand_dims(image, axis=0)
+        attack_kwargs = {"eps": eps_0, "alpha": eps_0/1000, "num_iter": 48, "restarts": 48}
+        attack = PgdRandomRestart(model=keras_model, **attack_kwargs)
+        attack_inputs = (image, tf.constant(predict_label_for_attack))
+        adv_example = attack(*attack_inputs, time_limit=20, predict_label=predict_label)
         
-        for i in range(len(inputs)):
-            print('image: ', i, file=f)
-            print('image: ', i)
-            predict_label = np.argmax(true_labels[i])
-            print('predict_label:', predict_label)
-            print('predict_label:', predict_label, file=f)
-            adv_false = []
-            has_adv_false = False
-            flag = True
-            for j in range(i*9,i*9+9):
-                target_label = targets[j]
-                print('target_label:', target_label)
-                print('target_label:', target_label, file=f)
-                weights = model.weights[:-1]
-                biases = model.biases[:-1]
-                shapes = model.shapes[:-1]
-                W, b, s = model.weights[-1], model.biases[-1], model.shapes[-1]
-                last_weight = (W[predict_label,:,:,:]-W[target_label,:,:,:]).reshape([1]+list(W.shape[1:]))
-                weights.append(last_weight)
-                biases.append(np.asarray([b[predict_label]-b[target_label]]))
-                shapes.append((1,1,1))
-
-                LB, UB, A_u, A_l, B_u, B_l, pad, stride = find_output_bounds(weights, biases, shapes, model.pads, model.strides, inputs[i].astype(np.float32), eps_0, p_n)
-                
-                # solving
-                lp_model = new_model()
-                lp_model, x = creat_var(lp_model, inputs[i], eps_0)
-                shape = inputs[i].shape
-                adv_image, min_val = get_solution_value(lp_model, x, shape, A_u, A_l, B_u, B_l, pad, stride, p_n, eps_0)
-                
-                if min_val > 0:
-                    continue
-                
-                # label of potential counterexample
-                a = adv_image[np.newaxis,:,:,:]
-                print(a.dtype)
-                aa = a.astype(np.float32)
-                adv_label = np.argmax(np.squeeze(keras_model.predict(aa)))
-                print('adv_label: ', adv_label)
-                print('adv_label: ', adv_label, file=f)
-                
-                if adv_label == predict_label:
-                    adv_false.append((adv_image, target_label))
-                    has_adv_false = True
-                    print('this adv_example is false!', file=f)
-                    continue
-                flag = False
-                
-                fashion_mnist_labels_names = ['T-shirt or top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
-                
-                cifar10_labels_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
-                
-                # save adv images
-                print('adv_image.shape:', adv_image.shape)
-                print(adv_image)
-                print(adv_image, file=f)
-                save_adv_image = np.clip(adv_image * 255, 0, 255)
-                if cifar:
-                    save_adv_image = save_adv_image.astype(np.int32)
-                    plt.imshow(save_adv_image)
-                    adv_label_str = cifar10_labels_names[adv_label]
-                elif gtsrb:
-                    save_adv_image = save_adv_image.astype(np.int32)
-                    plt.imshow(save_adv_image)
-                    adv_label_str = str(adv_label)
-                elif fashion_mnist:
-                    plt.imshow(save_adv_image, cmap='gray')
-                    adv_label_str = fashion_mnist_labels_names[adv_label]
-                else:
-                    plt.imshow(save_adv_image, cmap='gray')
-                    adv_label_str = str(adv_label)
-                print(save_adv_image)
-                print(save_adv_image, file=f)
-                print('adv_label_str.shape:', type(adv_label_str))
-                save_path = 'adv_examples/'+ dataset + '_'+str(eps_0)+'_adv_image_'+str(i)+'_adv_label_'+adv_label_str +'.png'
-                plt.savefig(save_path)
-                
-                print(inputs[i].astype(np.float32))
-                original_image = np.clip(inputs[i].astype(np.float32)*255,0,255)
-                if cifar:
-                    original_image = original_image.astype(np.int32)
-                    plt.imshow(original_image)
-                    predict_label_str = cifar10_labels_names[predict_label]
-                elif gtsrb:
-                    original_image = original_image.astype(np.int32)
-                    plt.imshow(original_image)
-                    predict_label_str = str(predict_label)
-                elif fashion_mnist:
-                    plt.imshow(original_image, cmap='gray')
-                    predict_label_str = fashion_mnist_labels_names[predict_label]
-                else:
-                    plt.imshow(original_image, cmap='gray')
-                    predict_label_str = str(predict_label)
-                print(original_image, file=f)
-                save_path = 'adv_examples/'+ dataset +'_'+str(eps_0)+'_original_image_'+str(i)+'_predict_label_'+predict_label_str+'.png'
-                plt.savefig(save_path)
-                
-                break
-                
-            if not flag:
-                unrobust_number += 1
-                print('this figure is not robust in eps_0', file=f)
-                print("[L1] method = WiNR-{}, model = {}, image no = {}, true_label = {}, target_label = {}, adv_label = {}, robustness = {:.5f}".format(activation, file_name, i+1, predict_label, target_label, adv_label,eps_0), file=f)
-            else:
-                if has_adv_false:
-                    has_adv_false_number += 1
-                else:
-                    robust_number += 1
-                    print("figure {} is robust in {}.".format(i, eps_0), file=f)
-                    
-            print('---------------------------------', file=f)
-            print("robust: {}, unrobust: {}, has_adv_false: {}".format((flag and (not has_adv_false)), (not flag), has_adv_false), file=f)
-            time_sum = time.time() - start_time
-            if time_sum >= limit_time:
-                print('time_sum:',time_sum, file=f)
+        # judge whether the adv_example is true adversarial example
+        adv_example_label = keras_model.predict(adv_example)
+        adv_example_label = np.argmax(adv_example_label)
+        if adv_example_label != predict_label:
+            original_image = image.numpy()
+            adv_example = adv_example.numpy()
+            norm_fn = lambda x: np.max(np.abs(x),axis=(1,2,3))
+            norm_diff = norm_fn(adv_example-original_image)
+            printlog("PGD norm_diff(adv_example-original_example) = {}".format(norm_diff))
+            PGD_flag = True
+            PGD_falsified_number += 1
+            #falsified_number += 1
+            printlog("PGD adv_example_label = {}".format(adv_example_label))
+            printlog("PGD attack succeed!")
+        else:
+            printlog("PGD attack failed!")
+        PGD_time += (time.time() - PGD_start_time)
+        
+        if PGD_flag:
+            continue
+        
+        printlog('----------------DeepCert----------------')
+        DeepCert_start_time = time.time()
+        DeepCert_flag = True
+        for j in range(i*9,i*9+9):
+            target_label = targets[j]
+            printlog("target label = {}".format(target_label))
+            
+            weights = model.weights[:-1]
+            biases = model.biases[:-1]
+            shapes = model.shapes[:-1]
+            W, b, s = model.weights[-1], model.biases[-1], model.shapes[-1]
+            last_weight = (W[predict_label,:,:,:]-W[target_label,:,:,:]).reshape([1]+list(W.shape[1:]))
+            weights.append(last_weight)
+            biases.append(np.asarray([b[predict_label]-b[target_label]]))
+            shapes.append((1,1,1))
+                                                      
+            LB, UB, A_u, A_l, B_u, B_l, pad, stride = find_output_bounds(weights, biases, shapes, model.pads, model.strides, inputs[i].astype(np.float32), eps_0, p_n)
+            
+            printlog("DeepCert:  {:.6s} <= f_c - f_t <= {:.6s}".format(str(np.squeeze(LB)),str(np.squeeze(UB))))
+    
+            if LB <= 0:
+                DeepCert_flag = False 
                 break
 
-        first_sort_time = (time.time()-start_time)
-        print("[L0] method = WiNR-{}, model = {}, eps = {}, total images = {}, robust = {}, unrobust = {}, has_adv_false = {}, total runtime = {:.2f}".format(activation,file_name,eps_0, len(inputs), robust_number, unrobust_number, has_adv_false_number, first_sort_time), file=f)
-        results.append((eps_0, robust_number, unrobust_number, has_adv_false_number, first_sort_time))
-    print('eps_0  robust_number  unrobust_number  has_adv_false_number total_runtime', file=f)
-    for i in range(len(results)):
-        print(results[i][0], '\t', results[i][1], '\t\t', results[i][2], '\t\t', results[i][3], '\t\t', results[i][4], file=f)
+        if DeepCert_flag:
+            DeepCert_robust_number += 1
+            DeepCert_robust_img_id.append(i)
+            printlog("DeepCert: robust")
+        elif PGD_flag:
+            pass
+        else:
+            PGD_DeepCert_unknown_number += 1
+            printlog("DeepCert: unknown")
+        
+        DeepCert_time += (time.time()-DeepCert_start_time)
+        
+        printlog("PGD      - falsified: {}".format(PGD_flag))
+        printlog("DeepCert - robust: {}, unknown: {}".format((DeepCert_flag and not(PGD_flag)), not(DeepCert_flag)))
+        
+        if (PGD_time+DeepCert_time)>=time_limit:
+            printlog("[L1] PGD_DeepCert_total_time = {}, reach time limit!".format(PGD_time+DeepCert_time))
+            break
+
     
-    f.close()     
+    PGD_DeepCert_total_time = (PGD_time+DeepCert_time)
+    PGD_aver_time = PGD_time / total_images
+    DeepCert_aver_time = DeepCert_time / total_images
+    PGD_DeepCert_aver_time = PGD_DeepCert_total_time / total_images
+    printlog("[L0] method = PGD, average runtime = {:.3f}".format(PGD_aver_time))
+    printlog("[L0] method = DeepCert, average runtime = {:.3f}".format(DeepCert_aver_time))
+    printlog("[L0] method = PGD+DeepCert, eps = {}, total images = {}, robust = {}, falsified = {}, unknown = {}, average runtime = {:.3f}".format(eps_0, total_images, DeepCert_robust_number, PGD_falsified_number, PGD_DeepCert_unknown_number, PGD_DeepCert_aver_time))
+    '''
     
+    printlog("----------------WiNR----------------")
+    WiNR_start_time = time.time()
+    WiNR_robust_number = 0
+    WiNR_falsified_number = 0
+    WiNR_unknown_number = 0 
+    verified_number = 0
+    WiNR_robust_img_id = []
+    WiNR_falsified_img_id = []
+    total_images = 0
+    
+    for i in range(len(inputs)):
+        total_images += 1
+        
+        printlog("----------------image id = {}----------------".format(i))
+        predict_label = np.argmax(true_labels[i])
+        printlog("image predict label = {}".format(predict_label))
+        
+        adv_false = []
+        has_adv_false = False
+        WiNR_robust_flag = True
+        WiNR_falsified_flag = False
+        
+        for j in range(i*9,i*9+9):
+            target_label = targets[j]
+            printlog("target label = {}".format(target_label))
+            
+            weights = model.weights[:-1]
+            biases = model.biases[:-1]
+            shapes = model.shapes[:-1]
+            W, b, s = model.weights[-1], model.biases[-1], model.shapes[-1]
+            last_weight = (W[predict_label,:,:,:]-W[target_label,:,:,:]).reshape([1]+list(W.shape[1:]))
+            weights.append(last_weight)
+            biases.append(np.asarray([b[predict_label]-b[target_label]]))
+            shapes.append((1,1,1))
+                        
+            LB, UB, A_u, A_l, B_u, B_l, pad, stride = find_output_bounds(weights, biases, shapes, model.pads, model.strides, inputs[i].astype(np.float32), eps_0, p_n)
+            
+            # solving
+            lp_model = new_model()
+            lp_model, x = creat_var(lp_model, inputs[i], eps_0)
+            shape = inputs[i].shape
+            adv_image, min_val = get_solution_value(lp_model, x, shape, A_u, A_l, B_u, B_l, pad, stride, p_n, eps_0)
+            printlog("WiNR min_val={:.5f}".format(min_val))
+            
+            if min_val > 0:
+                continue
+            
+            WiNR_robust_flag = False
+            # label of potential counterexample
+            a = adv_image[np.newaxis,:,:,:]
+            aa = a.astype(np.float32)
+            adv_label = np.argmax(np.squeeze(keras_model.predict(aa)))
+            
+            if adv_label == predict_label:
+                adv_false.append((adv_image, target_label))
+                has_adv_false = True
+                printlog('this adv_example is false!')
+                continue
+            
+            WiNR_diff = (adv_image-inputs[i]).reshape(-1)
+            WiNR_diff = np.absolute(WiNR_diff)
+            WiNR_diff = np.max(WiNR_diff)
+            printlog("WiNR diff(adv_example-original_example) = {}".format(WiNR_diff))
+            WiNR_falsified_flag = True
+            break
+        
+        if WiNR_robust_flag:
+            WiNR_robust_number += 1
+            WiNR_robust_img_id.append(i)
+            printlog("WiNR: robust")
+        elif WiNR_falsified_flag:
+            printlog("WiNR: falsified")
+            WiNR_falsified_number += 1
+            WiNR_falsified_img_id.append(i)
+        else:
+            printlog("WiNR: unknown")
+            WiNR_unknown_number += 1
+            
+        printlog("WiNR - robust: {}, falsified: {}, unknown: {}".format(WiNR_robust_flag, WiNR_falsified_flag, (not(WiNR_robust_flag) and not(WiNR_falsified_flag))))
+        end_time = (time.time()-WiNR_start_time)
+        verified_number += 1
+        if end_time >= time_limit:
+            printlog("verifying time : {} sec, reach time limit {} sec.".format(end_time, time_limit))
+            break
+        
+    WiNR_total_time = (time.time()-WiNR_start_time)
+    WiNR_aver_time = WiNR_total_time / total_images
+    printlog("[L0] method = WiNR, eps = {}, total images = {}, verified number = {}, robust = {}, falsified = {}, unknown = {}, average runtime = {:.3f}".format(eps_0, total_images, verified_number, WiNR_robust_number, WiNR_falsified_number, WiNR_unknown_number, WiNR_aver_time))
+    printlog("[L0] DeepCert robust images id: {}".format(DeepCert_robust_img_id))
+    printlog("[L0] WiNR robust images id: {}".format(WiNR_robust_img_id))
+    
+    printlog("----------------PGD+WiNR----------------")
+
+    PGD_before_WiNR_falsified_number = 0
+    WiNR_after_PGD_robust_number = 0
+    WiNR_after_PGD_falsified_number = 0
+    WiNR_after_PGD_unknown_number = 0 
+    PGD_before_WiNR_time = 0
+    WiNR_after_PGD_time = 0
+    PGD_before_WiNR_falsified_img_id = []
+    WiNR_after_PGD_falsified_img_id = []
+    total_images = 0
+    
+    for i in range(len(inputs)):
+        total_images += 1
+        printlog("----------------image id = {}----------------".format(i))
+        predict_label = np.argmax(true_labels[i])
+        printlog("image predict label = {}".format(predict_label))
+        
+        printlog("----------------PGD(+WiNR)----------------")
+        PGD_before_WiNR_start_time = time.time()
+        # generate adversarial example using PGD
+        PGD_before_WiNR_flag = False
+        predict_label_for_attack = predict_label.astype("float32")
+        image = tf.constant(inputs[i])
+        image = tf.expand_dims(image, axis=0)
+        attack_kwargs = {"eps": eps_0, "alpha": eps_0/1000, "num_iter": 48, "restarts": 48}
+        attack = PgdRandomRestart(model=keras_model, **attack_kwargs)
+        attack_inputs = (image, tf.constant(predict_label_for_attack))
+        adv_example = attack(*attack_inputs, time_limit=20, predict_label=predict_label)
+        
+        # judge whether the adv_example is true adversarial example
+        adv_example_label = keras_model.predict(adv_example)
+        adv_example_label = np.argmax(adv_example_label)
+        if adv_example_label != predict_label:
+            original_image = image.numpy()
+            adv_example = adv_example.numpy()
+            norm_fn = lambda x: np.max(np.abs(x),axis=(1,2,3))
+            norm_diff = norm_fn(adv_example-original_image)
+            printlog("PGD(+WiNR) norm_diff(adv_example-original_example) = {}".format(norm_diff))
+            PGD_before_WiNR_flag = True
+            PGD_before_WiNR_falsified_number += 1
+            PGD_before_WiNR_falsified_img_id.append(i)
+            printlog("PGD(+WiNR) adv_example_label = {}".format(adv_example_label))
+            printlog("PGD(+WiNR) attack succeed!")
+        else:
+            printlog("PGD(+WiNR) attack failed!")
+        PGD_before_WiNR_time += (time.time() - PGD_before_WiNR_start_time)
+        
+        if PGD_before_WiNR_flag:
+            continue
+        
+        printlog('----------------WiNR(+PGD)----------------')
+        WiNR_after_PGD_start_time = time.time()
+        adv_false = []
+        has_adv_false = False
+        WiNR_after_PGD_robust_flag = True
+        WiNR_after_PGD_falsified_flag = False
+        
+        for j in range(i*9,i*9+9):
+            target_label = targets[j]
+            printlog("target label = {}".format(target_label))
+            
+            weights = model.weights[:-1]
+            biases = model.biases[:-1]
+            shapes = model.shapes[:-1]
+            W, b, s = model.weights[-1], model.biases[-1], model.shapes[-1]
+            last_weight = (W[predict_label,:,:,:]-W[target_label,:,:,:]).reshape([1]+list(W.shape[1:]))
+            weights.append(last_weight)
+            biases.append(np.asarray([b[predict_label]-b[target_label]]))
+            shapes.append((1,1,1))
+              
+            LB, UB, A_u, A_l, B_u, B_l, pad, stride = find_output_bounds(weights, biases, shapes, model.pads, model.strides, inputs[i].astype(np.float32), eps_0, p_n)   
+            
+            # solving
+            lp_model = new_model()
+            lp_model, x = creat_var(lp_model, inputs[i], eps_0)
+            shape = inputs[i].shape
+            adv_image, min_val = get_solution_value(lp_model, x, shape, A_u, A_l, B_u, B_l, pad, stride, p_n, eps_0)
+            printlog("WiNR(+PGD) min_val={:.5f}".format(min_val))
+            
+            if min_val > 0:
+                continue
+            
+            WiNR_after_PGD_robust_flag = False
+            # label of potential counterexample
+            a = adv_image[np.newaxis,:,:,:]
+            aa = a.astype(np.float32)
+            adv_label = np.argmax(np.squeeze(keras_model.predict(aa)))
+            
+            if adv_label == predict_label:
+                adv_false.append((adv_image, target_label))
+                has_adv_false = True
+                print('this adv_example is false!')
+                continue
+            
+            WiNR_diff = (adv_image-inputs[i]).reshape(-1)
+            WiNR_diff = np.absolute(WiNR_diff)
+            WiNR_diff = np.max(WiNR_diff)
+            printlog("WiNR(+PGD) diff(adv_example-original_example) = {}".format(WiNR_diff))
+            WiNR_after_PGD_falsified_flag = True
+            break
+        
+        if WiNR_after_PGD_robust_flag:
+            WiNR_after_PGD_robust_number += 1
+            printlog("WiNR(+PGD): robust")
+        elif WiNR_after_PGD_falsified_flag:
+            WiNR_after_PGD_falsified_number += 1
+            WiNR_after_PGD_falsified_img_id.append(i)
+            printlog("WiNR(+PGD): falsified")
+        else:
+            printlog("WiNR(+PGD): unknown")
+            WiNR_after_PGD_unknown_number += 1
+        
+        WiNR_after_PGD_time += (time.time()-WiNR_after_PGD_start_time)
+        printlog("PGD(+WiNR) - falsified: {}".format(PGD_before_WiNR_flag))
+        printlog("WiNR(+PGD) - robust: {}, falsified: {}, unknown: {}".format(WiNR_after_PGD_robust_flag, WiNR_after_PGD_falsified_flag, (not(WiNR_after_PGD_robust_flag) and not(WiNR_after_PGD_falsified_flag))))
+        
+        if (PGD_before_WiNR_time + WiNR_after_PGD_time) >= time_limit:
+            printlog("PGD + WiNR total time : {} sec, reach time limit!".format(PGD_before_WiNR_time + WiNR_after_PGD_time))
+            break
+    
+    PGD_before_WiNR_aver_time = PGD_before_WiNR_time / total_images
+    WiNR_after_PGD_aver_time = WiNR_after_PGD_time / total_images
+    PGD_WiNR_total_time = PGD_before_WiNR_time + WiNR_after_PGD_time
+    PGD_WiNR_total_aver_time = PGD_WiNR_total_time / total_images
+    printlog("[L0] method = PGD(+WiNR), average runtime = {:.3f}".format(PGD_before_WiNR_aver_time))
+    printlog("[L0] method = WiNR(+PGD), average runtime = {:.3f}".format(WiNR_after_PGD_aver_time))
+    printlog("[L0] method = PGD+WiNR, eps = {}, total images = {}, robust = {}, falsified = {}, unknown = {}, average runtime = {:.3f}".format(eps_0, total_images, WiNR_after_PGD_robust_number, (PGD_before_WiNR_falsified_number+WiNR_after_PGD_falsified_number), WiNR_after_PGD_unknown_number, PGD_WiNR_total_aver_time))
+    printlog("[L0] PGD(+WiNR) falsified images id: {}".format(len(PGD_before_WiNR_falsified_img_id)))
+    printlog("[L0] WiNR(+PGD) falsified images: {}".format(len(WiNR_after_PGD_falsified_img_id)))
+    printlog("[L0] WiNR falsified images: {}".format(len(WiNR_falsified_img_id)))
+    printlog("[L0] PGD(+WiNR) falsified images id: {}".format(PGD_before_WiNR_falsified_img_id))
+    printlog("[L0] WiNR(+PGD) falsified images id: {}".format(WiNR_after_PGD_falsified_img_id))
+    printlog("[L0] WiNR falsified images id: {}".format(WiNR_falsified_img_id))
+       
     print('------------------')
     print('------------------')
-    return results
+    #return eps_0, len(inputs), DeepCert_robust_number, PGD_falsified_number, PGD_DeepCert_unknown_number, PGD_aver_time, DeepCert_aver_time, PGD_DeepCert_aver_time, WiNR_robust_number, WiNR_falsified_number, WiNR_unknown_number, WiNR_aver_time, WiNR_after_PGD_robust_number, (PGD_before_WiNR_falsified_number+WiNR_after_PGD_falsified_number), WiNR_after_PGD_unknown_number, PGD_before_WiNR_aver_time, WiNR_after_PGD_aver_time, PGD_WiNR_total_aver_time
+
+    return eps_0, len(inputs), WiNR_robust_number, WiNR_falsified_number, WiNR_unknown_number, WiNR_aver_time, WiNR_after_PGD_robust_number, (PGD_before_WiNR_falsified_number+WiNR_after_PGD_falsified_number), WiNR_after_PGD_unknown_number, PGD_before_WiNR_aver_time, WiNR_after_PGD_aver_time, PGD_WiNR_total_aver_time
+
+
+    # for i in range(len(inputs)):
+    #     print('image: ', i, file=f)
+    #     print('image: ', i)
+    #     predict_label = np.argmax(true_labels[i])
+    #     print('predict_label:', predict_label)
+    #     print('predict_label:', predict_label, file=f)
+    #     adv_false = []
+    #     has_adv_false = False
+    #     flag = True
+    #     for j in range(i*9,i*9+9):
+    #         target_label = targets[j]
+    #         print('target_label:', target_label)
+    #         print('target_label:', target_label, file=f)
+    #         weights = model.weights[:-1]
+    #         biases = model.biases[:-1]
+    #         shapes = model.shapes[:-1]
+    #         W, b, s = model.weights[-1], model.biases[-1], model.shapes[-1]
+    #         last_weight = (W[predict_label,:,:,:]-W[target_label,:,:,:]).reshape([1]+list(W.shape[1:]))
+    #         weights.append(last_weight)
+    #         biases.append(np.asarray([b[predict_label]-b[target_label]]))
+    #         shapes.append((1,1,1))
+
+    #         LB, UB, A_u, A_l, B_u, B_l, pad, stride = find_output_bounds(weights, biases, shapes, model.pads, model.strides, inputs[i].astype(np.float32), eps_0, p_n)
+            
+    #         # solving
+    #         lp_model = new_model()
+    #         lp_model, x = creat_var(lp_model, inputs[i], eps_0)
+    #         shape = inputs[i].shape
+    #         adv_image, min_val = get_solution_value(lp_model, x, shape, A_u, A_l, B_u, B_l, pad, stride, p_n, eps_0)
+            
+    #         if min_val > 0:
+    #             continue
+            
+    #         # label of potential counterexample
+    #         a = adv_image[np.newaxis,:,:,:]
+    #         print(a.dtype)
+    #         aa = a.astype(np.float32)
+    #         adv_label = np.argmax(np.squeeze(keras_model.predict(aa)))
+    #         print('adv_label: ', adv_label)
+    #         print('adv_label: ', adv_label, file=f)
+            
+    #         if adv_label == predict_label:
+    #             adv_false.append((adv_image, target_label))
+    #             has_adv_false = True
+    #             print('this adv_example is false!', file=f)
+    #             continue
+    #         flag = False
+            
+    #         fashion_mnist_labels_names = ['T-shirt or top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+            
+    #         cifar10_labels_names = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+            
+    #         # save adv images
+    #         print('adv_image.shape:', adv_image.shape)
+    #         print(adv_image)
+    #         print(adv_image, file=f)
+    #         save_adv_image = np.clip(adv_image * 255, 0, 255)
+    #         if cifar:
+    #             save_adv_image = save_adv_image.astype(np.int32)
+    #             plt.imshow(save_adv_image)
+    #             adv_label_str = cifar10_labels_names[adv_label]
+    #         elif gtsrb:
+    #             save_adv_image = save_adv_image.astype(np.int32)
+    #             plt.imshow(save_adv_image)
+    #             adv_label_str = str(adv_label)
+    #         elif fashion_mnist:
+    #             plt.imshow(save_adv_image, cmap='gray')
+    #             adv_label_str = fashion_mnist_labels_names[adv_label]
+    #         else:
+    #             plt.imshow(save_adv_image, cmap='gray')
+    #             adv_label_str = str(adv_label)
+    #         print(save_adv_image)
+    #         print(save_adv_image, file=f)
+    #         print('adv_label_str.shape:', type(adv_label_str))
+    #         save_path = 'adv_examples/'+ dataset + '_'+str(eps_0)+'_adv_image_'+str(i)+'_adv_label_'+adv_label_str +'.png'
+    #         plt.savefig(save_path)
+            
+    #         print(inputs[i].astype(np.float32))
+    #         original_image = np.clip(inputs[i].astype(np.float32)*255,0,255)
+    #         if cifar:
+    #             original_image = original_image.astype(np.int32)
+    #             plt.imshow(original_image)
+    #             predict_label_str = cifar10_labels_names[predict_label]
+    #         elif gtsrb:
+    #             original_image = original_image.astype(np.int32)
+    #             plt.imshow(original_image)
+    #             predict_label_str = str(predict_label)
+    #         elif fashion_mnist:
+    #             plt.imshow(original_image, cmap='gray')
+    #             predict_label_str = fashion_mnist_labels_names[predict_label]
+    #         else:
+    #             plt.imshow(original_image, cmap='gray')
+    #             predict_label_str = str(predict_label)
+    #         print(original_image, file=f)
+    #         save_path = 'adv_examples/'+ dataset +'_'+str(eps_0)+'_original_image_'+str(i)+'_predict_label_'+predict_label_str+'.png'
+    #         plt.savefig(save_path)
+            
+    #         break
+            
+    #     if not flag:
+    #         unrobust_number += 1
+    #         print('this figure is not robust in eps_0', file=f)
+    #         print("[L1] method = WiNR-{}, model = {}, image no = {}, true_label = {}, target_label = {}, adv_label = {}, robustness = {:.5f}".format(activation, file_name, i+1, predict_label, target_label, adv_label,eps_0), file=f)
+    #     else:
+    #         if has_adv_false:
+    #             has_adv_false_number += 1
+    #         else:
+    #             robust_number += 1
+    #             print("figure {} is robust in {}.".format(i, eps_0), file=f)
+                
+    #     print('---------------------------------', file=f)
+    #     print("robust: {}, unrobust: {}, has_adv_false: {}".format((flag and (not has_adv_false)), (not flag), has_adv_false), file=f)
+    #     time_sum = time.time() - start_time
+    #     if time_sum >= limit_time:
+    #         print('time_sum:',time_sum, file=f)
+    #         break
+
+    # first_sort_time = (time.time()-start_time)
+    # print("[L0] method = WiNR-{}, model = {}, eps = {}, total images = {}, robust = {}, unrobust = {}, has_adv_false = {}, total runtime = {:.2f}".format(activation,file_name,eps_0, len(inputs), robust_number, unrobust_number, has_adv_false_number, first_sort_time), file=f)
+    # results.append((eps_0, robust_number, unrobust_number, has_adv_false_number, first_sort_time))
+    
+    # print('eps_0  robust_number  unrobust_number  has_adv_false_number total_runtime', file=f)
+    # for i in range(len(results)):
+    #     print(results[i][0], '\t', results[i][1], '\t\t', results[i][2], '\t\t', results[i][3], '\t\t', results[i][4], file=f)
+    
+    # f.close()     
+    
+    # print('------------------')
+    # print('------------------')
+    # return results

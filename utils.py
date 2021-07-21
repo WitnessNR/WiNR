@@ -5,8 +5,11 @@ import pandas as pd
 from train_myself_model import *
 from PIL import Image
 import pandas as pd
-from tensorflow.contrib.keras.api.keras.datasets import mnist, cifar10
-from tensorflow.contrib.keras.api.keras.models import load_model
+# from tensorflow.contrib.keras.api.keras.datasets import mnist, cifar10
+# from tensorflow.contrib.keras.api.keras.models import load_model
+
+from tensorflow.keras.datasets import mnist, cifar10
+from tensorflow.keras.models import load_model
 from tensorflow.python.keras.datasets import fashion_mnist
 
 random.seed(1215)
@@ -42,6 +45,7 @@ def get_gtsrb_test_dataset():
         y_test.append(class_id)
         
     x_test = np.array(x_test)
+    x_test = x_test.astype('float32')
     y_test = np.array(y_test)
     y_test = to_categorical(y_test, 43)
     
@@ -123,7 +127,7 @@ def generate_data_myself(dataset, model, samples=10, start=0, ids=None):
             true_ids.append(start+i)
         
     print('targets:', targets, file=f)
-    print('true_labels:', true_labels)
+    #print('true_labels:', true_labels)
     # images of test set
     inputs = np.array(inputs)
     # target label

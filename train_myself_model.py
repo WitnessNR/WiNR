@@ -1,13 +1,23 @@
 import gzip
 import numpy as np
-import tensorflow.contrib.keras.api.keras as keras
-from tensorflow.contrib.keras.api.keras.models import Sequential, Model
-from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D, MaxPooling2D, Flatten, Dense, Dropout
-from tensorflow.contrib.keras.api.keras.layers import Add, Lambda, Conv2D, AveragePooling2D, BatchNormalization
-from tensorflow.contrib.keras.api.keras.optimizers import Adam, SGD
-from tensorflow.contrib.keras.api.keras.datasets import mnist, cifar10
+# import tensorflow.contrib.keras.api.keras as keras
+# from tensorflow.contrib.keras.api.keras.models import Sequential, Model
+# from tensorflow.contrib.keras.api.keras.layers import Input, Convolution2D, MaxPooling2D, Flatten, Dense, Dropout
+# from tensorflow.contrib.keras.api.keras.layers import Add, Lambda, Conv2D, AveragePooling2D, BatchNormalization
+# from tensorflow.contrib.keras.api.keras.optimizers import Adam, SGD
+# from tensorflow.contrib.keras.api.keras.datasets import mnist, cifar10
+# from tensorflow.contrib.keras.api.keras.utils import to_categorical
+# from tensorflow.contrib.keras.api.keras.preprocessing.image import ImageDataGenerator
+
+import tensorflow.keras as keras
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Input, Convolution2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.layers import Add, Lambda, Conv2D, AveragePooling2D, BatchNormalization
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.datasets import mnist, cifar10
+from tensorflow.keras.utils import to_categorical
+
 from tensorflow.python.keras.datasets import fashion_mnist
-from tensorflow.contrib.keras.api.keras.preprocessing.image import ImageDataGenerator
 import tensorflow as tf
 import random
 import os
@@ -15,7 +25,6 @@ import glob
 from skimage import io
 from skimage import transform
 from skimage import exposure, color
-from tensorflow.contrib.keras.api.keras.utils import to_categorical
 from tensorflow.python.keras.engine.base_layer import Layer
 import h5py
     
@@ -285,14 +294,15 @@ def train_resnet(file_name, dataset, nlayer, num_epochs=10, activation=tf.nn.sig
     
     
 if __name__ == '__main__':
-    train(file_name="models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5], kernels = [3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
-    train(file_name="models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5,5,5], kernels = [3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
-    train(file_name="models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5,5,5,5,5], kernels = [3,3,3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
-    train(file_name="models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5,5,5,5,5,5,5], kernels = [3,3,3,3,3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
-    train_lenet(file_name="models/cifar10_cnn_lenet_averpool_sigmoid_myself", dataset='cifar10', params=[6, 16, 100], num_epochs=10, activation = tf.nn.sigmoid)
-    train_resnet(file_name='models/cifar10_resnet_2_sigmoid_myself', dataset='cifar10', nlayer=2, num_epochs=10)
-    train_resnet(file_name='models/cifar10_resnet_3_sigmoid_myself', dataset='cifar10', nlayer=3, num_epochs=10)
-    train_resnet(file_name='models/cifar10_resnet_4_sigmoid_myself', dataset='cifar10', nlayer=4, num_epochs=10)
-    train_resnet(file_name='models/cifar10_resnet_5_sigmoid_myself', dataset='cifar10', nlayer=5, num_epochs=10)
+    # train(file_name="models/fashion_mnist_cnn_4layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5], kernels = [3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
+    # train(file_name="models/fashion_mnist_cnn_6layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5,5,5], kernels = [3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
+    # train(file_name="models/fashion_mnist_cnn_8layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5,5,5,5,5], kernels = [3,3,3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
+    train(file_name="models/fashion_mnist_cnn_8layer_35_3_sigmoid_myself",dataset='fashion_mnist', filters=[35,35,35,35,35,35,35], kernels = [3,3,3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
+    # train(file_name="models/fashion_mnist_cnn_10layer_5_3_sigmoid_myself",dataset='fashion_mnist', filters=[5,5,5,5,5,5,5,5,5], kernels = [3,3,3,3,3,3,3,3,3], num_epochs=10, activation = tf.nn.sigmoid)
+    # train_lenet(file_name="models/cifar10_cnn_lenet_averpool_sigmoid_myself", dataset='cifar10', params=[6, 16, 100], num_epochs=10, activation = tf.nn.sigmoid)
+    # train_resnet(file_name='models/cifar10_resnet_2_sigmoid_myself', dataset='cifar10', nlayer=2, num_epochs=10)
+    # train_resnet(file_name='models/cifar10_resnet_3_sigmoid_myself', dataset='cifar10', nlayer=3, num_epochs=10)
+    # train_resnet(file_name='models/cifar10_resnet_4_sigmoid_myself', dataset='cifar10', nlayer=4, num_epochs=10)
+    # train_resnet(file_name='models/cifar10_resnet_5_sigmoid_myself', dataset='cifar10', nlayer=5, num_epochs=10)
 
     
